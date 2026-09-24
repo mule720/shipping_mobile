@@ -106,6 +106,12 @@ export function ShipmentsScreen({ navigation }: Props) {
           )}
         </View>
         <TouchableOpacity
+          style={[styles.addBtn, { backgroundColor: primaryColor + '15', marginRight: 6 }]}
+          onPress={() => navigation.navigate('BatchUpload')}
+        >
+          <Ionicons name="cloud-upload-outline" size={20} color={primaryColor} />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: primaryColor }]}
           onPress={() => navigation.navigate('CreateShipment')}
         >

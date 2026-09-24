@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useShipments, useUpdateShipmentStatus } from '../../hooks/useData';
+import { graphqlClient } from '../../api/client';
 import { useStore } from '../../store/useStore';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Card } from '../../components/ui/Card';
@@ -35,6 +36,7 @@ export function ShipmentDetailScreen({ navigation, route }: Props) {
   const { shipmentId } = route.params;
   const { data: shipments, isLoading } = useShipments();
   const updateStatus = useUpdateShipmentStatus();
+  const [resending, setResending] = useState(false);
 
   const shipment: Shipment | undefined = shipments?.find(s => s.id === shipmentId);
 
@@ -51,6 +53,22 @@ export function ShipmentDetailScreen({ navigation, route }: Props) {
 
   const canAdvance = shipment && STATUS_FLOW.indexOf(shipment.status) < STATUS_FLOW.length - 1;
   const nextStatus = shipment ? STATUS_FLOW[STATUS_FLOW.indexOf(shipment.status) + 1] : null;
+
+  const handleResendReceipt = async () => {
+    if (!shipment) return;
+    setResending(true);
+    try {
+      await graphqlClient.query(
+        `mutation SendShipmentReceipt($shipmentId: UUID!) { sendShipmentReceipt(shipmentId: $shipmentId) }`,
+        { shipmentId: shipment.id },
+      );
+      Alert.alert('Receipt Sent', 'The receipt has been resent successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to resend receipt.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleAdvance = () => {
     if (!shipment || !nextStatus) return;
@@ -180,6 +198,56 @@ export function ShipmentDetailScreen({ navigation, route }: Props) {
                 <Text style={styles.instructions}>{shipment.specialInstructions}</Text>
               </Card>
             )}
+
+            {/* Receipt Section */}
+            <Card style={styles.section} padding={16}>
+              <Text style={styles.sectionTitle}>Receipt</Text>
+
+              {(shipment as any).notificationChannel && (
+                <View style={styles.channelRow}>
+                  <Ionicons
+                    name={
+                      (shipment as any).notificationChannel === 'whatsapp'
+                        ? 'logo-whatsapp'
+                        : (shipment as any).notificationChannel === 'email'
+                        ? 'mail-outline'
+                        : 'chatbubble-outline'
+                    }
+                    size={14}
+                    color={primaryColor}
+                  />
+                  <View style={[styles.channelBadge, { backgroundColor: primaryColor + '15', borderColor: primaryColor + '40' }]}>
+                    <Text style={[styles.channelBadgeText, { color: primaryColor }]}>
+                      {((shipment as any).notificationChannel as string).toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.receiptBtnRow}>
+                <TouchableOpacity
+                  style={[styles.receiptBtn, { borderColor: primaryColor }]}
+                  onPress={handleResendReceipt}
+                  activeOpacity={0.7}
+                  disabled={resending}
+                >
+                  {resending
+                    ? <ActivityIndicator size="small" color={primaryColor} />
+                    : <Ionicons name="send-outline" size={15} color={primaryColor} />
+                  }
+                  <Text style={[styles.receiptBtnText, { color: primaryColor }]}>Resend Receipt</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.receiptBtn, { borderColor: '#6b7280' }]}
+                  onPress={() => navigation.navigate('ReceiptLookup', { trackingNumber: shipment.trackingNumber })}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="globe-outline" size={15} color="#6b7280" />
+                  <Text style={[styles.receiptBtnText, { color: '#6b7280' }]}>Look Up Online</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
           </>
         )}
       </ScrollView>
@@ -216,4 +284,13 @@ const styles = StyleSheet.create({
   flag: { backgroundColor: '#fee2e2', borderWidth: 1, borderColor: '#fecaca', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   flagText: { fontSize: 10, fontWeight: '700', color: '#ef4444' },
   instructions: { fontSize: 14, color: '#374151', lineHeight: 20 },
+  channelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  channelBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
+  channelBadgeText: { fontSize: 12, fontWeight: '700' },
+  receiptBtnRow: { flexDirection: 'row', gap: 10 },
+  receiptBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1.5, borderRadius: 10, paddingVertical: 10,
+  },
+  receiptBtnText: { fontSize: 13, fontWeight: '600' },
 });

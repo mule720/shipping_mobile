@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../../store/useStore';
 import { Card } from '../../components/ui/Card';
+import { graphqlClient } from '../../api/client';
+import { MY_NOTIFICATION_PREFERENCES_QUERY, UPDATE_MY_NOTIFICATION_PREFERENCES_MUTATION } from '../../api/queries';
 
 const PREFS = [
   { key: 'shipment_updates', label: 'Shipment Updates', desc: 'Status changes for your shipments' },
@@ -12,6 +14,12 @@ const PREFS = [
   { key: 'team_activity', label: 'Team Activity', desc: 'New users and role changes' },
   { key: 'system_alerts', label: 'System Alerts', desc: 'Maintenance and service updates' },
 ];
+
+const RECEIPT_CHANNELS = [
+  { value: 'sms', label: 'SMS', icon: 'phone-portrait-outline' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: 'chatbubble-ellipses-outline' },
+  { value: 'email', label: 'Mail', icon: 'mail-outline' },
+] as const;
 
 export function NotificationsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -23,6 +31,34 @@ export function NotificationsScreen({ navigation }: any) {
     team_activity: false,
     system_alerts: false,
   });
+  const [receiptChannel, setReceiptChannel] = useState('sms');
+  const [loadingPref, setLoadingPref] = useState(true);
+  const [savingPref, setSavingPref] = useState(false);
+
+  useEffect(() => {
+    graphqlClient.query(MY_NOTIFICATION_PREFERENCES_QUERY)
+      .then((data: any) => {
+        if (data?.myNotificationPreferences?.preferredReceiptChannel) {
+          setReceiptChannel(data.myNotificationPreferences.preferredReceiptChannel);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPref(false));
+  }, []);
+
+  const handleSaveChannel = async () => {
+    setSavingPref(true);
+    try {
+      await graphqlClient.mutate(UPDATE_MY_NOTIFICATION_PREFERENCES_MUTATION, {
+        preferredReceiptChannel: receiptChannel,
+      });
+      Alert.alert('Saved', 'Default receipt channel updated.');
+    } catch {
+      Alert.alert('Error', 'Could not save preference.');
+    } finally {
+      setSavingPref(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -52,6 +88,39 @@ export function NotificationsScreen({ navigation }: any) {
             </View>
           ))}
         </Card>
+
+        <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Receipt Delivery</Text>
+        <Text style={styles.channelDesc}>
+          Your preferred channel for shipment receipts. Pre-filled when you create new shipments.
+        </Text>
+        {loadingPref ? (
+          <ActivityIndicator color={primaryColor} style={{ marginVertical: 12 }} />
+        ) : (
+          <Card padding={16}>
+            <View style={styles.channelRow}>
+              {RECEIPT_CHANNELS.map(ch => {
+                const active = receiptChannel === ch.value;
+                return (
+                  <TouchableOpacity
+                    key={ch.value}
+                    style={[styles.channelBtn, active && { borderColor: primaryColor, backgroundColor: primaryColor + '15' }]}
+                    onPress={() => setReceiptChannel(ch.value)}
+                  >
+                    <Ionicons name={ch.icon as any} size={18} color={active ? primaryColor : '#9ca3af'} />
+                    <Text style={[styles.channelLabel, active && { color: primaryColor }]}>{ch.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: primaryColor }, savingPref && { opacity: 0.6 }]}
+              onPress={handleSaveChannel}
+              disabled={savingPref}
+            >
+              <Text style={styles.saveBtnText}>{savingPref ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
       </ScrollView>
     </View>
   );
@@ -69,4 +138,10 @@ const styles = StyleSheet.create({
   rowLeft: { flex: 1, marginRight: 12 },
   rowLabel: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 2 },
   rowDesc: { fontSize: 13, color: '#9ca3af' },
+  channelDesc: { fontSize: 13, color: '#6b7280', marginBottom: 12 },
+  channelRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  channelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 2, borderColor: '#e5e7eb', gap: 6 },
+  channelLabel: { fontSize: 13, fontWeight: '600', color: '#9ca3af' },
+  saveBtn: { borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

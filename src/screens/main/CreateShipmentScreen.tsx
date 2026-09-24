@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch,
 } from 'react-native';
@@ -11,6 +11,9 @@ import { Button } from '../../components/ui/Button';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Card } from '../../components/ui/Card';
 import { ZAMBIAN_CITIES, PAYMENT_TYPES } from '../../constants/config';
+import { NotificationChannelSelector } from '../../components/NotificationChannelSelector';
+import { graphqlClient } from '../../api/client';
+import { MY_NOTIFICATION_PREFERENCES_QUERY } from '../../api/queries';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface Props {
@@ -101,6 +104,17 @@ export function CreateShipmentScreen({ navigation }: Props) {
   const createMutation = useCreateShipment();
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<FormData>(INITIAL);
+  const [notifChannel, setNotifChannel] = useState('sms');
+
+  useEffect(() => {
+    graphqlClient.query(MY_NOTIFICATION_PREFERENCES_QUERY)
+      .then((data: any) => {
+        if (data?.myNotificationPreferences?.preferredReceiptChannel) {
+          setNotifChannel(data.myNotificationPreferences.preferredReceiptChannel);
+        }
+      })
+      .catch(() => {}); // silently ignore — default to sms
+  }, []);
 
   const cityOptions = ZAMBIAN_CITIES.map(c => ({ value: c, label: c }));
   const branchOptions = (branches ?? []).map(b => ({ value: b.name, label: b.name }));
@@ -146,6 +160,7 @@ export function CreateShipmentScreen({ navigation }: Props) {
         isFragile: form.isFragile, isSensitive: form.isSensitive, isColdChain: form.isColdChain, isInsured: form.isInsured,
         insuranceValue: form.insuranceValue ? parseFloat(form.insuranceValue) : undefined,
         specialInstructions: form.specialInstructions || undefined,
+        notificationChannel: notifChannel,
       });
       Alert.alert('Success', `Shipment created!\nTracking: ${result.trackingNumber}`, [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -241,6 +256,7 @@ export function CreateShipmentScreen({ navigation }: Props) {
               {form.paymentType === 'cod' && (
                 <Input label="COD Amount (ZMW)" value={form.codAmount} onChangeText={v => set('codAmount', v)} keyboardType="decimal-pad" placeholder="0.00" leftIcon="cash-outline" />
               )}
+              <NotificationChannelSelector value={notifChannel} onChange={setNotifChannel} primaryColor={primaryColor} />
             </Card>
 
             <Card style={styles.section} padding={16}>
@@ -279,6 +295,7 @@ export function CreateShipmentScreen({ navigation }: Props) {
                 ['Destination', form.destinationBranch],
                 ['Payment', form.paymentType],
                 ['Cost', `ZMW ${form.shippingCost}`],
+                ['Receipt via', notifChannel.toUpperCase()],
                 ...(form.paymentType === 'cod' ? [['COD Amount', `ZMW ${form.codAmount}`]] : []),
               ].map(([label, value]) => (
                 <View key={label} style={reviewStyles.row}>

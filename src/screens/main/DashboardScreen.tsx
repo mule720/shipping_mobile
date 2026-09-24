@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../../store/useStore';
 import { useDashboardStats, useShipments } from '../../hooks/useData';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { formatCurrency, formatDate } from '../../utils/format';
+import { graphqlClient } from '../../api/client';
+import { ANNOUNCEMENTS_QUERY } from '../../api/queries';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { Shipment } from '../../types';
 
@@ -22,6 +25,42 @@ const KPI_CARDS = [
 interface Props {
   navigation: NativeStackNavigationProp<any>;
 }
+
+function AnnouncementBanner() {
+  const { primaryColor } = useStore();
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  const { data } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: () => graphqlClient.query(ANNOUNCEMENTS_QUERY, {}),
+  });
+
+  const announcements: any[] = ((data as any)?.announcements ?? []).filter(
+    (a: any) => a.isActive && !dismissed.has(a.id)
+  );
+
+  if (announcements.length === 0) return null;
+  const a = announcements[0];
+
+  return (
+    <View style={[bannerStyles.wrap, { backgroundColor: primaryColor + '15', borderLeftColor: primaryColor }]}>
+      <Ionicons name="megaphone-outline" size={16} color={primaryColor} style={{ marginTop: 1 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={[bannerStyles.title, { color: primaryColor }]}>{a.title}</Text>
+        <Text style={bannerStyles.body}>{a.body}</Text>
+      </View>
+      <TouchableOpacity onPress={() => setDismissed(p => new Set([...p, a.id]))}>
+        <Ionicons name="close-outline" size={18} color="#9ca3af" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'flex-start', marginHorizontal: 16, marginTop: 12, marginBottom: 4, borderRadius: 10, padding: 12, borderLeftWidth: 3, gap: 8 },
+  title: { fontSize: 13, fontWeight: '700' },
+  body: { fontSize: 12, color: '#374151', marginTop: 2, lineHeight: 17 },
+});
 
 export function DashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -60,6 +99,9 @@ export function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Announcement banner */}
+      <AnnouncementBanner />
 
       <View style={styles.body}>
         {/* KPI Grid */}
